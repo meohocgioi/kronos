@@ -1,0 +1,12 @@
+{
+  "name": "Kronos Forecast",
+  "version": "1.3.0",
+  "repo": "meohocgioi/kronos",
+  "branch": "main",
+  "changes": [
+    {"version": "1.3.0", "date": "2026-10-23", "notes": ["The app can now update itself from the Updates button, with undo", "Automatic rollback if an updated app fails to start"]},
+    {"version": "1.2.0", "date": "2026-10-23", "notes": ["Update button for the Kronos model code, with test-run and undo"]},
+    {"version": "1.1.0", "date": "2026-10-23", "notes": ["Stocks, forex, indices and futures via Yahoo Finance", "Forecasts follow each market's trading hours and local time zone"]},
+    {"version": "1.0.0", "date": "2026-10-23", "notes": ["First release: crypto forecasts on your GPU in a local web app"]}
+  ]
+}

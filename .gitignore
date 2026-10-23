@@ -1,0 +1,15 @@
+# Local environment and downloads (created by the launcher on each computer)
+.venv/
+Kronos/
+Kronos_previous/
+Kronos_new/
+Kronos_undo/
+_kronos_tmp/
+_app_previous/
+_app_new/
+.kronos-port
+.app-just-updated
+__pycache__/
+*.pyc
+*.zip
+.DS_Store

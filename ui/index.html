@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kronos Forecast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: trading-terminal strip — control bar, stat rail, full-width chart, notes + forecast table below */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --fg: #16191f; --muted: #636b78; --line: #dde1e7;
+  --up: #0e9f6e; --down: #d9434f; --accent: #2f6fdf; --warn: #b7791f;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0f1218; --panel: #161a22; --fg: #e6e9ef; --muted: #8a93a3; --line: #262c37;
+  --up: #26c08b; --down: #f0616d; --accent: #6b9bff; --warn: #e0a63c; color-scheme: dark } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+input[type=checkbox] { width: auto; padding: 0; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--sans); padding: 20px 16px 32px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.wrap > * { min-width: 0; }
+.chartbox { overflow: hidden; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; font-family: var(--mono); }
+.sub { font-size: 13px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.up { color: var(--up); border-color: currentColor; } .pill.down { color: var(--down); border-color: currentColor; }
+.device { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.device b { color: var(--up); font-weight: 500; } .device b.cpu { color: var(--warn); }
+.kver { font: 12px var(--mono); padding: 3px 10px; border-radius: 999px; color: var(--muted); }
+.kver.avail { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.update { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; font-size: 13px; }
+.update b { font-size: 14px; }
+.update .meta { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.update ul { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; max-height: 180px; overflow: auto; }
+.update .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.update .err { color: var(--down); }
+.upd-row { display: grid; gap: 6px; min-width: 0; }
+.upd-row + .upd-row { border-top: 1px solid var(--line); padding-top: 10px; }
+.upd-row.foot .meta { font-family: var(--sans); }
+
+.bar { display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(4, minmax(0, 1fr)) auto; gap: 10px; align-items: end;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+@media (max-width: 900px) { .bar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .f-sym, .f-go { grid-column: 1 / -1; } .device { margin-left: 0; } }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 11px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+input, select { font: 14px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; width: 100%; }
+#sym { text-transform: uppercase; } #sym::placeholder { text-transform: none; color: var(--muted); }
+button { font: 14px var(--sans); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; min-width: 140px; }
+button:disabled { opacity: .55; cursor: progress; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row2 { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; }
+.chip { font: 12px var(--mono); padding: 3px 9px; border-radius: 999px; }
+.row2 label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+#recent { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.csvname { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.spacer { flex: 1; }
+
+.msg { font-size: 13px; padding: 9px 12px; border-radius: 6px; border: 1px solid var(--down); color: var(--down); background: var(--panel); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stat { background: var(--panel); padding: 10px 14px; display: grid; gap: 3px; min-width: 0; }
+.stat > span { font-size: 11px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+.stat b { font: 500 17px var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat i { font: normal 12px var(--mono); color: var(--muted); }
+.up { color: var(--up); } .down { color: var(--down); }
+
+.chartbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; position: relative; }
+#chart { height: min(62vh, 580px); min-height: 360px; }
+.readout { position: absolute; top: 8px; left: 12px; right: 80px; z-index: 3; font: 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); pointer-events: none; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.readout b { color: var(--fg); font-weight: 500; }
+.overlay { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; text-align: center; padding: 24px; background: color-mix(in srgb, var(--panel) 88%, transparent); border-radius: 8px; color: var(--muted); font-size: 14px; }
+.overlay b { display: block; color: var(--fg); font: 500 22px var(--mono); margin-bottom: 6px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+.controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.controls button { font-size: 13px; padding: 5px 11px; }
+.key { display: inline-block; width: 18px; border-top: 2px solid var(--accent); }
+.key.dash { border-top-style: dashed; } .key.faint { opacity: .35; border-top-width: 1px; }
+.updated { color: var(--muted); font: 12px var(--mono); margin-left: auto; }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; }
+@media (max-width: 800px) { .lower { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.card h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.card p, .card li { font-size: 14px; line-height: 1.55; max-width: 65ch; margin: 0 0 8px; }
+.card ul { margin: 0 0 8px; padding-left: 18px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font: 12.5px var(--mono); font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 11.5px var(--sans); color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">Kronos Forecast</h1>
+    <span class="sub" id="subtitle">Pick a pair and press Run forecast</span>
+    <span class="pill" id="verdict" hidden></span>
+    <span class="device" id="device">Connecting to local server…</span>
+    <button type="button" class="kver" id="kver" title="App and Kronos model code updates">Updates</button>
+  </header>
+  <section class="update" id="update-panel" hidden aria-live="polite"></section>
+
+  <form class="bar" id="form" autocomplete="off">
+    <div class="field f-sym">
+      <label for="sym">Symbol</label>
+      <input id="sym" list="sym-list" spellcheck="false" placeholder="e.g. BINANCE:BTCUSDT.P, HOSE:HPG, NASDAQ:AAPL, FX:EURUSD, OANDA:XAUUSD" value="BINANCE:BTCUSDT.P">
+      <datalist id="sym-list">
+        <option value="BINANCE:BTCUSDT.P"></option><option value="BINANCE:ETHUSDT.P"></option><option value="BINANCE:SOLUSDT.P"></option>
+        <option value="BYBIT:BTCUSDT.P"></option><option value="BYBIT:RLCUSDT.P"></option><option value="OKX:BTCUSDT.P"></option>
+        <option value="COINBASE:BTCUSD"></option><option value="COINBASE:ETHUSD"></option><option value="KRAKEN:BTCUSD"></option>
+        <option value="HOSE:HPG"></option><option value="HOSE:FPT"></option><option value="HOSE:VCB"></option><option value="HOSE:VNM"></option>
+        <option value="NASDAQ:AAPL"></option><option value="NASDAQ:NVDA"></option><option value="NASDAQ:TSLA"></option><option value="NYSE:BRK.B"></option>
+        <option value="FX:EURUSD"></option><option value="FX:USDJPY"></option><option value="OANDA:XAUUSD"></option><option value="COMEX:GC1!"></option><option value="NYMEX:CL1!"></option>
+        <option value="SP:SPX"></option><option value="NASDAQ:NDX"></option><option value="TVC:NI225"></option><option value="TSE:7203"></option><option value="HKEX:700"></option>
+      </datalist>
+    </div>
+    <div class="field"><label for="interval">Candle interval</label><select id="interval"></select></div>
+    <div class="field"><label for="horizon">Predict next</label><select id="horizon"></select></div>
+    <div class="field"><label for="model">Model</label>
+      <select id="model"><option value="mini">Kronos-mini</option><option value="small" selected>Kronos-small</option><option value="base">Kronos-base</option></select></div>
+    <div class="field"><label for="paths">Paths</label>
+      <select id="paths"><option>20</option><option selected>50</option><option>100</option><option>200</option><option>500</option></select></div>
+    <div class="field f-go"><button class="primary" id="go" type="submit">Run forecast</button></div>
+    <div class="row2">
+      <span id="recent"></span>
+      <span class="spacer"></span>
+      <label title="Re-run the forecast each time a new candle closes"><input type="checkbox" id="auto"> Re-run every candle</label>
+      <button type="button" id="csv-btn">Use CSV file…</button>
+      <input type="file" id="csv" accept=".csv,text/csv" hidden>
+      <span class="csvname" id="csv-name" hidden></span>
+    </div>
+  </form>
+
+  <div class="msg" id="banner" hidden></div>
+  <section class="stats" id="stats" aria-label="Forecast summary"></section>
+
+  <div class="chartbox">
+    <div class="readout" id="readout"></div>
+    <div id="chart" role="img" aria-label="Candlestick chart with a Kronos forecast band"></div>
+    <div class="overlay" id="overlay"><div>Choose a pair, a candle interval and how far ahead to predict, then press <b style="display:inline;font-size:inherit;font-family:inherit">Run forecast</b>.</div></div>
+  </div>
+
+  <div class="controls">
+    <label><input type="checkbox" id="opt-median" checked> <span class="key"></span> Median path</label>
+    <label><input type="checkbox" id="opt-band" checked> <span class="key dash"></span> 10th–90th percentile</label>
+    <label><input type="checkbox" id="opt-paths"> <span class="key faint"></span> Sample paths</label>
+    <button id="zoom-fc" type="button">Zoom to forecast</button>
+    <button id="zoom-all" type="button">Show all</button>
+    <span class="updated" id="updated"></span>
+  </div>
+
+  <div class="lower">
+    <div class="card">
+      <h2>How to read this</h2>
+      <p>Kronos draws many possible price paths for the candles ahead. The solid line is the median path; the dashed lines mark where 80% of paths fell.</p>
+      <ul>
+        <li>A median near 0% inside a wide band means the model sees no edge.</li>
+        <li>"Paths ending higher" near 50% is a coin flip. Look for a lopsided split that holds on more than one interval.</li>
+        <li>The model uses price and volume only. It knows nothing about news, funding or the order book.</li>
+        <li>More paths give a steadier range. The forecast starts after the last closed candle.</li>
+        <li>Stocks, forex and futures only forecast trading hours: nights, weekends and lunch breaks are skipped. Under a day, "next 4h" means the next 4 hours the market is open; "next 1w" means 5 sessions. Times are the exchange's local time.</li>
+      </ul>
+      <p style="color:var(--muted);font-size:13px">Research output, not financial advice.</p>
+    </div>
+    <div class="card">
+      <h2 id="tbl-title">Forecast by candle (UTC)</h2>
+      <div class="tbl"><table id="tbl"><thead><tr><th>Time</th><th>10th</th><th>Median</th><th>90th</th><th>vs last</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function () {
+  const INTERVALS = [["1m", 60], ["5m", 300], ["15m", 900], ["30m", 1800], ["1h", 3600], ["4h", 14400], ["1d", 86400], ["1w", 604800]];
+  const HORIZONS = [["1m", 60], ["5m", 300], ["15m", 900], ["30m", 1800], ["1h", 3600], ["2h", 7200], ["4h", 14400], ["12h", 43200], ["1d", 86400], ["3d", 259200], ["1w", 604800], ["30d", 2592000]];
+  const $ = (id) => document.getElementById(id);
+  const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+  const secOf = (list, k) => (list.find((x) => x[0] === k) || [])[1];
+
+  // ---------- Controls ----------
+  const saved = store.get("kf-state", {});
+  let recent = store.get("kf-recent", ["BINANCE:BTCUSDT.P", "BYBIT:RLCUSDT.P", "COINBASE:BTCUSD"]);
+  let csvText = null;
+  $("interval").innerHTML = INTERVALS.map(([k]) => `<option value="${k}">${k}</option>`).join("");
+  function fillHorizons(want) {
+    const iv = secOf(INTERVALS, $("interval").value);
+    $("horizon").innerHTML = HORIZONS.map(([k, s]) => {
+      const ok = s >= iv;
+      return `<option value="${k}" ${ok ? "" : "disabled"}>next ${k}</option>`;
+    }).join("");
+    const opts = [...$("horizon").options];
+    const pick = opts.find((o) => o.value === want && !o.disabled) || opts.find((o) => !o.disabled);
+    if (pick) $("horizon").value = pick.value;
+  }
+  if (saved.sym) $("sym").value = saved.sym;
+  $("interval").value = saved.interval || "5m";
+  fillHorizons(saved.horizon || "1h");
+  if (saved.model) $("model").value = saved.model;
+  if (saved.paths) $("paths").value = saved.paths;
+  $("interval").onchange = () => fillHorizons($("horizon").value);
+  function renderRecent() {
+    $("recent").innerHTML = recent.map((s) => `<button type="button" class="chip" data-s="${s}">${s}</button>`).join("");
+    $("recent").querySelectorAll("button").forEach((b) => b.onclick = () => { $("sym").value = b.dataset.s; clearCsv(); run(); });
+  }
+  renderRecent();
+  function clearCsv() { csvText = null; $("csv-name").hidden = true; $("csv").value = ""; $("sym").disabled = false; }
+  $("csv-btn").onclick = () => $("csv").click();
+  $("csv").onchange = async () => {
+    const f = $("csv").files[0]; if (!f) return;
+    csvText = await f.text();
+    $("csv-name").innerHTML = `${f.name} <button type="button" class="chip" id="csv-clear">✕ use exchange</button>`;
+    $("csv-name").hidden = false; $("sym").disabled = true;
+    $("csv-clear").onclick = clearCsv;
+  };
+
+  // ---------- Chart ----------
+  let tzLabel = "UTC";
+  const LC = LightweightCharts;
+  const chart = LC.createChart($("chart"), { autoSize: true,
+    timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 4, borderVisible: false },
+    rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.22 } },
+    crosshair: { mode: LC.CrosshairMode.Normal },
+    localization: { timeFormatter: (t) => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ") + " " + tzLabel } });
+  const candles = chart.addCandlestickSeries({ priceLineVisible: false, borderVisible: false });
+  const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+  chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+  const lineOpts = { lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false };
+  const pathSeries = Array.from({ length: 40 }, () => chart.addLineSeries({ ...lineOpts, lineWidth: 1, visible: false }));
+  const lo = chart.addLineSeries({ ...lineOpts, lineWidth: 1, lineStyle: LC.LineStyle.Dashed, lastValueVisible: true, title: "p10" });
+  const hi = chart.addLineSeries({ ...lineOpts, lineWidth: 1, lineStyle: LC.LineStyle.Dashed, lastValueVisible: true, title: "p90" });
+  const med = chart.addLineSeries({ lineWidth: 2, lastValueVisible: true, priceLineVisible: false, title: "median" });
+  let nowLine = null, lastBars = null, ctx = null;
+
+  const css = () => { const s = getComputedStyle(document.documentElement); const g = (k) => s.getPropertyValue(k).trim();
+    return { bg: g("--panel"), fg: g("--fg"), muted: g("--muted"), line: g("--line"), up: g("--up"), down: g("--down"), accent: g("--accent") }; };
+  function paint() {
+    const c = css();
+    chart.applyOptions({ layout: { background: { type: "solid", color: c.bg }, textColor: c.muted, fontFamily: "IBM Plex Mono, ui-monospace, monospace", fontSize: 11 },
+      grid: { vertLines: { color: c.line }, horzLines: { color: c.line } },
+      crosshair: { vertLine: { color: c.muted, labelBackgroundColor: c.fg }, horzLine: { color: c.muted, labelBackgroundColor: c.fg } } });
+    candles.applyOptions({ upColor: c.up, downColor: c.down, wickUpColor: c.up, wickDownColor: c.down });
+    [lo, hi, med].forEach((s) => s.applyOptions({ color: c.accent }));
+    pathSeries.forEach((s) => s.applyOptions({ color: c.accent + "40" }));
+    if (lastBars) vol.setData(lastBars.map((b) => ({ time: b.time, value: b.volume, color: (b.close >= b.open ? c.up : c.down) + "55" })));
+    if (nowLine) nowLine.applyOptions({ color: c.muted });
+  }
+  paint();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
+  $("opt-median").onchange = (e) => med.applyOptions({ visible: e.target.checked });
+  $("opt-band").onchange = (e) => [lo, hi].forEach((s) => s.applyOptions({ visible: e.target.checked }));
+  $("opt-paths").onchange = (e) => pathSeries.forEach((s) => s.applyOptions({ visible: e.target.checked }));
+  $("zoom-all").onclick = () => chart.timeScale().fitContent();
+
+  let dec = 2;
+  const decimalsFor = (p) => p >= 1000 ? 1 : p >= 100 ? 2 : p >= 1 ? 3 : p >= 0.01 ? 4 : 6;
+  const fmt = (v) => v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const when = (t, ivs) => { const d = new Date(t * 1000).toISOString(); return ivs >= 86400 ? d.slice(0, 10) : d.slice(5, 16).replace("T", " "); };
+
+  function render(r) {
+    const ivs = secOf(INTERVALS, r.interval), steps = r.steps, bars = r.candles;
+    lastBars = bars;
+    const last = bars[bars.length - 1], now = last.close;
+    dec = decimalsFor(now);
+    const pf = { type: "price", precision: dec, minMove: Math.pow(10, -dec) };
+    [candles, lo, hi, med, ...pathSeries].forEach((s) => s.applyOptions({ priceFormat: pf }));
+    candles.setData(bars.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
+    const join = (arr) => [{ time: last.time, value: now }, ...r.future.map((t, i) => ({ time: t, value: arr[i] }))];
+    lo.setData(join(r.p10)); hi.setData(join(r.p90)); med.setData(join(r.p50));
+    pathSeries.forEach((s, i) => s.setData(r.sample_paths[i] ? join(r.sample_paths[i]) : []));
+    if (nowLine) candles.removePriceLine(nowLine);
+    nowLine = candles.createPriceLine({ price: now, lineWidth: 1, lineStyle: LC.LineStyle.Dotted, axisLabelVisible: false, title: "last" });
+    paint();
+
+    const chg = (v) => { const d = (v / now - 1) * 100; return (d >= 0 ? "+" : "") + d.toFixed(2) + "%"; };
+    const cls = (v) => v > now ? "up" : v < now ? "down" : "";
+    const e = steps - 1, mEnd = r.p50[e];
+    const upPct = Math.round(r.ends.filter((v) => v > now).length / r.ends.length * 100);
+    const dMed = (mEnd / now - 1) * 100, spread = (r.p90[e] - r.p10[e]) / now * 100;
+    const leans = Math.abs(dMed) > spread * 0.15 && Math.abs(upPct - 50) >= 10;
+    const v = $("verdict"); v.hidden = false;
+    v.textContent = !leans ? "No clear direction" : dMed > 0 ? "Leans up" : "Leans down";
+    v.className = "pill" + (leans ? (dMed > 0 ? " up" : " down") : "");
+
+    $("title").textContent = r.symbol;
+    tzLabel = r.tz || "UTC";
+    $("subtitle").textContent = `${r.interval} candles · next ${r.horizon}${r.always_open === false ? " of trading" : ""} (${steps} candle${steps > 1 ? "s" : ""}) · ${r.model} · ${r.paths_n} paths · ${r.source}`;
+    $("stats").innerHTML = [
+      ["Last close · " + when(last.time, ivs) + " " + tzLabel, fmt(now), `${bars.length} candles of history`],
+      ["Median in " + r.horizon, `<span class="${cls(mEnd)}">${fmt(mEnd)}</span>`, chg(mEnd)],
+      ["10th–90th range", `${fmt(r.p10[e])} – ${fmt(r.p90[e])}`, `${chg(r.p10[e])} to ${chg(r.p90[e])}`],
+      ["25th–75th range", `${fmt(r.p25[e])} – ${fmt(r.p75[e])}`, `${chg(r.p25[e])} to ${chg(r.p75[e])}`],
+      ["Paths ending higher", upPct + "%", `of ${r.paths_n}`],
+    ].map(([k, b, i]) => `<div class="stat"><span>${k}</span><b>${b}</b><i>${i}</i></div>`).join("");
+
+    const every = Math.max(1, Math.ceil(steps / 12)), rows = [];
+    for (let i = every - 1; i < steps; i += every) rows.push(i);
+    if (rows[rows.length - 1] !== e) rows.push(e);
+    $("tbl-title").textContent = (steps > 12 ? `Forecast every ${every} candles` : "Forecast by candle") + ` (${tzLabel})`;
+    $("tbl").querySelector("tbody").innerHTML = rows.map((i) =>
+      `<tr><td>${when(r.future[i], ivs)}</td><td>${fmt(r.p10[i])}</td><td class="${cls(r.p50[i])}">${fmt(r.p50[i])}</td><td>${fmt(r.p90[i])}</td><td class="${cls(r.p50[i])}">${chg(r.p50[i])}</td></tr>`).join("");
+
+    const zoom = () => chart.timeScale().setVisibleRange({ from: last.time - ivs * Math.max(48, steps * 3), to: r.future[e] });
+    zoom(); $("zoom-fc").onclick = zoom;
+    $("updated").textContent = `Ran ${new Date().toLocaleTimeString()} · data ${r.timing.data}s · model ${r.timing.model}s`;
+    ctx = { future: r.future, p10: r.p10, p50: r.p50, p90: r.p90, cls };
+  }
+
+  const ro = $("readout");
+  const idle = () => { ro.innerHTML = "<span>Hover the chart for values</span>"; };
+  idle();
+  chart.subscribeCrosshairMove((p) => {
+    if (!p || !p.time || !ctx) return idle();
+    const cd = p.seriesData.get(candles);
+    if (cd) { ro.innerHTML = `<span>O <b>${fmt(cd.open)}</b></span><span>H <b>${fmt(cd.high)}</b></span><span>L <b>${fmt(cd.low)}</b></span><span>C <b class="${cd.close >= cd.open ? "up" : "down"}">${fmt(cd.close)}</b></span>`; return; }
+    const i = ctx.future.indexOf(p.time);
+    if (i >= 0) ro.innerHTML = `<span>Forecast</span><span>p10 <b>${fmt(ctx.p10[i])}</b></span><span>median <b class="${ctx.cls(ctx.p50[i])}">${fmt(ctx.p50[i])}</b></span><span>p90 <b>${fmt(ctx.p90[i])}</b></span>`;
+  });
+
+  // ---------- Run ----------
+  let busy = false, timer = null, ticker = null;
+  function banner(text) { $("banner").hidden = !text; $("banner").textContent = text || ""; }
+  function overlay(html) { $("overlay").hidden = !html; if (html) $("overlay").innerHTML = html; }
+
+  async function run() {
+    if (busy) return;
+    const sym = $("sym").value.trim().toUpperCase().replace(/\s+/g, "");
+    if (!csvText && !/^([A-Z0-9_]+:)?[A-Z0-9.^=_!&-]+$/.test(sym)) { banner("Write the symbol as EXCHANGE:TICKER (BINANCE:BTCUSDT.P, HOSE:HPG, NASDAQ:AAPL, FX:EURUSD) or as a Yahoo Finance ticker (HPG.VN, GC=F, ^GSPC)."); return; }
+    const req = { symbol: sym, interval: $("interval").value, horizon: $("horizon").value, model: $("model").value, paths: +$("paths").value, csv: csvText };
+    $("sym").value = sym;
+    store.set("kf-state", { sym, interval: req.interval, horizon: req.horizon, model: req.model, paths: req.paths });
+    busy = true; banner(null); $("go").disabled = true;
+    const t0 = Date.now();
+    const show = () => overlay(`<div><b>${((Date.now() - t0) / 1000).toFixed(0)}s</b>Running ${req.model === "base" ? "Kronos-base" : "Kronos-" + req.model} on ${csvText ? "your CSV" : sym}…<br><span style="font-size:12px">The first run of each model downloads its weights; later runs are faster.</span></div>`);
+    show(); ticker = setInterval(show, 500); $("go").textContent = "Running…";
+    try {
+      const res = await fetch("/api/forecast", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || "The forecast failed.");
+      render(r); overlay(null);
+      if (!csvText && !recent.includes(sym)) { recent = [sym, ...recent].slice(0, 6); store.set("kf-recent", recent); renderRecent(); }
+    } catch (e) {
+      banner(e.message === "Failed to fetch" ? "Lost contact with the local server. Is the Kronos window still open?" : e.message);
+      overlay(lastBars ? null : `<div>No chart yet.</div>`);
+    } finally { clearInterval(ticker); busy = false; $("go").disabled = false; $("go").textContent = "Run forecast"; schedule(); }
+  }
+  function schedule() {
+    clearTimeout(timer);
+    if (!$("auto").checked || !lastBars) return;
+    const iv = secOf(INTERVALS, $("interval").value) * 1000;
+    const wait = Math.max(15000, iv - (Date.now() % iv) + 5000);  // just after the next candle closes
+    timer = setTimeout(run, wait);
+    $("updated").textContent += ` · next run ${new Date(Date.now() + wait).toLocaleTimeString()}`;
+  }
+  $("auto").onchange = schedule;
+  $("form").onsubmit = (e) => { e.preventDefault(); run(); };
+
+  fetch("/api/info").then((r) => r.json()).then((i) => {
+    $("device").innerHTML = `Running on <b class="${i.gpu ? "" : "cpu"}">${i.device}</b>${i.gpu ? "" : " · no GPU found, forecasts will be slow"}`;
+  }).catch(() => { $("device").textContent = "Local server not reachable"; });
+
+  // ---------- Updates: this app and the Kronos model code ----------
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const short = (sha) => sha ? sha.slice(0, 7) : "unknown";
+  const day = (iso) => iso ? iso.slice(0, 10) : "";
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const st = { app: null, kronos: null };
+  const getJSON = (u) => fetch(u).then((r) => r.json()).catch(() => ({ error: "Lost contact with the local server.", update_available: false }));
+
+  async function checkUpdates(fresh) {
+    const chip = $("kver");
+    chip.textContent = "Checking for updates…"; chip.className = "kver";
+    const q = fresh ? "?refresh=1" : "";
+    [st.app, st.kronos] = await Promise.all([getJSON("/api/app/status" + q), getJSON("/api/kronos/status" + q)]);
+    const n = [st.app, st.kronos].filter((r) => r && r.update_available).length;
+    if (n) { chip.textContent = n === 2 ? "2 updates available" : "Update available"; chip.className = "kver avail"; }
+    else if (st.app.error && st.kronos.error) chip.textContent = "Couldn't check for updates";
+    else chip.textContent = `v${st.app.local || "?"} · up to date`;
+    chip.title = "App and Kronos model code updates";
+    if (!$("update-panel").hidden) showPanel();
+  }
+
+  function section(kind) {
+    const r = st[kind] || {}, isApp = kind === "app";
+    const cur = isApp ? `v${r.local || "?"}` : short(r.local);
+    const latest = isApp ? (r.latest ? `v${r.latest}` : "") : (r.latest ? short(r.latest.sha) : "");
+    const prev = isApp ? `v${r.previous || "?"}` : short(r.previous);
+    let state, list = "";
+    if (r.error) state = `<span class="err">${esc(r.error)}</span>`;
+    else if (r.update_available) {
+      state = `<span><b>${latest || "A newer version"} is available.</b></span>`;
+      list = isApp
+        ? (r.changes || []).flatMap((c) => (c.notes || []).map((n) => `<li>v${esc(c.version)} · ${esc(n)}</li>`)).join("")
+        : (r.changes || []).map((c) => `<li>${day(c.date)} · ${esc(c.message)}</li>`).join("");
+    } else state = "<span>Up to date.</span>";
+    const buttons = [
+      r.update_available ? `<button type="button" class="primary" data-act="${kind}/update">Update ${isApp ? "the app" : "Kronos"}</button>` : "",
+      r.can_undo ? `<button type="button" data-act="${kind}/undo">Undo last update (back to ${prev})</button>` : "",
+    ].join("");
+    return `<div class="upd-row">
+      <div><b>${isApp ? "Kronos Forecast app" : "Kronos model code"}</b> <span class="meta">installed ${cur}${isApp && r.repo ? ` · updates from github.com/${esc(r.repo)}` : ""}</span></div>
+      ${state}${list ? `<ul>${list}</ul>` : ""}${buttons ? `<div class="actions">${buttons}</div>` : ""}</div>`;
+  }
+
+  function closePanel() { $("update-panel").hidden = true; }
+  function showPanel() {
+    const p = $("update-panel");
+    p.innerHTML = section("app") + section("kronos") + `<div class="upd-row foot">
+      <span class="meta">An update downloads the new version and test-runs a small forecast with it first. Only if that works does it switch over and restart (about a minute); otherwise nothing changes. The previous version is kept for Undo. Model weights update on their own from Hugging Face.</span>
+      <div class="actions"><button type="button" id="k-check">Check again</button><button type="button" id="k-close">Close</button></div></div>`;
+    p.hidden = false;
+    $("k-close").onclick = closePanel;
+    $("k-check").onclick = () => checkUpdates(true);
+    p.querySelectorAll("[data-act]").forEach((b) => b.onclick = () => change(...b.dataset.act.split("/")));
+  }
+
+  async function change(kind, action) {
+    const p = $("update-panel"), what = kind === "app" ? "the app" : "the Kronos model code";
+    p.innerHTML = action === "update"
+      ? `<b>Updating ${what}…</b><span>Downloading the new version and test-running a forecast with it. Keep the launcher window open.</span>`
+      : `<b>Going back to the previous version of ${what}…</b>`;
+    $("go").disabled = true; $("kver").disabled = true;
+    try {
+      const res = await fetch(`/api/${kind}/${action}`, { method: "POST" });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || "That didn't work.");
+      const ver = kind === "app" ? `v${r.version}` : short(r.sha);
+      p.innerHTML = `<b>${action === "update" ? "Updated" : "Went back"} to ${ver}. Restarting the app…</b><span>This page reloads by itself.</span>`;
+      await sleep(2000);
+      for (let i = 0; i < 300; i++) {
+        try { if ((await fetch("/api/info", { cache: "no-store" })).ok) { location.reload(); return; } } catch {}
+        await sleep(1000);
+      }
+      p.innerHTML = "<b>The app hasn't come back yet.</b><span>Check the launcher window for errors, then reload this page.</span>";
+    } catch (e) {
+      p.innerHTML = `<b>${action === "update" ? "The update didn't go through" : "Couldn't go back"}</b>
+        <span class="err">${esc(e.message === "Failed to fetch" ? "Lost contact with the local server. Is the launcher window still open?" : e.message)}</span>
+        <span>Nothing was changed.</span><div class="actions"><button type="button" id="k-close">Close</button></div>`;
+      $("k-close").onclick = closePanel;
+      $("go").disabled = false; $("kver").disabled = false;
+    }
+  }
+
+  $("kver").onclick = () => { if ($("update-panel").hidden) showPanel(); else closePanel(); };
+  checkUpdates(false);
+})();
+</script>
+</body>
+</html>
